@@ -37,7 +37,12 @@ function create_shaderhud(canvas, gl) {
             const stageid = isfrag ? 'FS' : 'VS';
             const glslstring = gl.getShaderSource(shader);
             const shaderid = `${program.name} ${stageid} ${glslstring.length}`;
-            const shaderentry = [program.name, shader, glslstring];
+            const shaderentry = {
+                program: program,
+                shader: shader,
+                original: glslstring,
+                applied: glslstring
+            };
             programentry.push(shaderid);
             shaderdb[shaderid] = shaderentry;
             selectel.insertAdjacentHTML('beforeend', `
@@ -47,12 +52,29 @@ function create_shaderhud(canvas, gl) {
         programdb[program.name] = programentry;
         useProgram(program);
     };
+    const updatebuttons = () => {
+        const shaderentry = shaderdb[selectel.value];
+        applyel.hidden = texteditor.getValue() === shaderentry.applied;
+        revertel.hidden = shaderentry.applied === shaderentry.original;
+    };
+    applyel.addEventListener('click', () => {
+        const shaderentry = shaderdb[selectel.value];
+        shaderentry.applied = texteditor.getValue();
+        updatebuttons();
+    });
+    revertel.addEventListener('click', () => {
+        const shaderentry = shaderdb[selectel.value];
+        shaderentry.applied = shaderentry.original;
+        texteditor.setValue(shaderentry.applied);
+        updatebuttons();
+    });
+    texteditor.on('change', () => updatebuttons());
     selectel.onchange = (evt) => {
         const val = evt.target.value;
         if (val) {
-            const glslstring = shaderdb[val][2];
             editorel.hidden = false;
-            texteditor.setValue(glslstring);
+            texteditor.setValue(shaderdb[val].applied);
+            updatebuttons();
         } else {
             editorel.hidden = true;
         }
