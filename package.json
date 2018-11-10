@@ -1,0 +1,17 @@
+{
+  "name": "shaderhud",
+  "version": "0.0.0",
+  "description": "Easily modify WebGL shaders with a canvas HUD",
+  "main": "shaderhud.js",
+  "jsdelivr": "shaderhud.js",
+  "unpkg": "shaderhud.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/prideout/shaderhud.git"
+  },
+  "files": [
+    "shaderhud.js",
+  ],
+  "author": "Philip Rideout",
+  "license": "MIT"
+}
