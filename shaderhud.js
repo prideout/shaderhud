@@ -1,30 +1,29 @@
 function dump_program_state(gl, prog) {
     const nblocks = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORM_BLOCKS);
     const ubindings = [];
+    let uniforms = '    ';
     for (let blocki = 0; blocki < nblocks; ++blocki) {
         const binding = gl.getActiveUniformBlockParameter(prog, blocki, gl.UNIFORM_BLOCK_BINDING);
         const name = gl.getActiveUniformBlockName(prog, blocki);
-        console.info('    ' + name + ' ' + binding);
+        uniforms +=  name + ':' + binding + ' ';
         ubindings.push(binding);
     }
-
-    const nattribs = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORM_BLOCKS);
+    let attribs = '    ';
+    const nattribs = gl.getProgramParameter(prog, gl.ACTIVE_ATTRIBUTES);
     for (let attribi = 0; attribi < nattribs; ++attribi) {
         const info = gl.getActiveAttrib(prog, attribi);
         const loc = gl.getAttribLocation(prog, info.name);
-        console.info('    ' + info.name + ' ' + info.size  + ' ' + info.type + ' ' + loc);
+        attribs += info.name + ':' + info.size  + ':' + info.type + ':' + loc + ' ';
     }
-
+    console.info(uniforms);
+    console.info(attribs);
     return ubindings;
 }
 
 function recompile_program(gl, prog, vname, vsource, fname, fsource) {
-
+    console.info('before:');
     const bindings = dump_program_state(gl, prog);
-
-    const prevshaders = gl.getAttachedShaders(prog);
-    gl.detachShader(prog, prevshaders[0]);
-    gl.detachShader(prog, prevshaders[1]);
+    prog = gl.createProgram();
 
     const vshader = gl.createShader(gl.VERTEX_SHADER);
     gl.shaderSource(vshader, vsource);
@@ -47,7 +46,9 @@ function recompile_program(gl, prog, vname, vsource, fname, fsource) {
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
         console.error(gl.getProgramInfoLog(prog));
-        return false;
+        gl.deleteProgram(prog);
+        gl.getError();
+        return null;
     }
 
     const nblocks = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORM_BLOCKS);
@@ -63,7 +64,7 @@ function recompile_program(gl, prog, vname, vsource, fname, fsource) {
     dump_program_state(gl, prog);
 
     console.info(`Success compiling [${vname}] and [${fname}].`);
-    return true;
+    return prog;
 }
 
 function create_shaderhud(canvas, gl) {
@@ -92,15 +93,64 @@ function create_shaderhud(canvas, gl) {
     const programdb = {};
     const shaderdb = {};
 
+    const updatebuttons = () => {
+        const shaderentry = shaderdb[selectel.value];
+        applyel.hidden = texteditor.getValue() === shaderentry.applied_string;
+        revertel.hidden = shaderentry.applied_string === shaderentry.original_string;
+    };
+
+    const recompileshaders = () => {
+        const shaderentry = shaderdb[selectel.value];
+        const programentry = programdb[shaderentry.programobj.name];
+        const shaderid0 = programentry.shaderids[0];
+        const shaderid1 = programentry.shaderids[1];
+        const source0 = shaderdb[shaderid0].applied_string;
+        const source1 = shaderdb[shaderid1].applied_string;
+        const prog = recompile_program(gl, shaderentry.programobj, shaderid0, source0, shaderid1, source1);
+        if (prog) {
+            programentry.replaced = prog;
+        }
+    };
+
+    applyel.addEventListener('click', () => {
+        const shaderentry = shaderdb[selectel.value];
+        shaderentry.applied_string = texteditor.getValue();
+        updatebuttons();
+        recompileshaders();
+    });
+
+    revertel.addEventListener('click', () => {
+        const shaderentry = shaderdb[selectel.value];
+        const programentry = programdb[shaderentry.programobj.name];
+        shaderentry.applied_string = shaderentry.original_string;
+        texteditor.setValue(shaderentry.applied_string);
+        updatebuttons();
+        programentry.replaced = programentry.original;
+    });
+
+    texteditor.on('change', () => updatebuttons());
+
+    selectel.onchange = (evt) => {
+        const val = evt.target.value;
+        if (val) {
+            editorel.hidden = false;
+            texteditor.setValue(shaderdb[val].applied_string);
+            updatebuttons();
+        } else {
+            editorel.hidden = true;
+        }
+    };
+
     const useProgram = gl.useProgram.bind(gl);
     gl.useProgram = (program) => {
         if (program.name in programdb) {
-            useProgram(program);
+            useProgram(programdb[program.name].replaced);
             return;
         }
         const programentry = {
             shaderids: [],
-            programobj: program
+            original: program,
+            replaced: program
         };
         const shaders = gl.getAttachedShaders(program);
         for (const shader of shaders) {
@@ -110,8 +160,6 @@ function create_shaderhud(canvas, gl) {
             const shaderid = `${program.name} ${stageid} ${glslstring.length}`;
             const shaderentry = {
                 programobj: program,
-                original_shaderobj: shader,
-                replaced_shaderobj: shader,
                 original_string: glslstring,
                 applied_string: glslstring,
             };
@@ -122,44 +170,6 @@ function create_shaderhud(canvas, gl) {
         }
         programdb[program.name] = programentry;
         useProgram(program);
-    };
-    const updatebuttons = () => {
-        const shaderentry = shaderdb[selectel.value];
-        applyel.hidden = texteditor.getValue() === shaderentry.applied_string;
-        revertel.hidden = shaderentry.applied_string === shaderentry.original_string;
-    };
-    const recompileshaders = () => {
-        const shaderentry = shaderdb[selectel.value];
-        const programentry = programdb[shaderentry.programobj.name];
-        const shaderid0 = programentry.shaderids[0];
-        const shaderid1 = programentry.shaderids[1];
-        const source0 = shaderdb[shaderid0].applied_string;
-        const source1 = shaderdb[shaderid1].applied_string;
-        recompile_program(gl, shaderentry.programobj, shaderid0, source0, shaderid1, source1);
-    };
-    applyel.addEventListener('click', () => {
-        const shaderentry = shaderdb[selectel.value];
-        shaderentry.applied_string = texteditor.getValue();
-        updatebuttons();
-        recompileshaders();
-    });
-    revertel.addEventListener('click', () => {
-        const shaderentry = shaderdb[selectel.value];
-        shaderentry.applied_string = shaderentry.original_string;
-        texteditor.setValue(shaderentry.applied_string);
-        updatebuttons();
-        recompileshaders();
-    });
-    texteditor.on('change', () => updatebuttons());
-    selectel.onchange = (evt) => {
-        const val = evt.target.value;
-        if (val) {
-            editorel.hidden = false;
-            texteditor.setValue(shaderdb[val].applied_string);
-            updatebuttons();
-        } else {
-            editorel.hidden = true;
-        }
     };
 }
 
