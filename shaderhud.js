@@ -1,4 +1,26 @@
+function dump_program_state(gl, prog) {
+    const nblocks = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORM_BLOCKS);
+    const ubindings = [];
+    for (let blocki = 0; blocki < nblocks; ++blocki) {
+        const binding = gl.getActiveUniformBlockParameter(prog, blocki, gl.UNIFORM_BLOCK_BINDING);
+        const name = gl.getActiveUniformBlockName(prog, blocki);
+        console.info('    ' + name + ' ' + binding);
+        ubindings.push(binding);
+    }
+
+    const nattribs = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORM_BLOCKS);
+    for (let attribi = 0; attribi < nattribs; ++attribi) {
+        const info = gl.getActiveAttrib(prog, attribi);
+        const loc = gl.getAttribLocation(prog, info.name);
+        console.info('    ' + info.name + ' ' + info.size  + ' ' + info.type + ' ' + loc);
+    }
+
+    return ubindings;
+}
+
 function recompile_program(gl, prog, vname, vsource, fname, fsource) {
+
+    const bindings = dump_program_state(gl, prog);
 
     const prevshaders = gl.getAttachedShaders(prog);
     gl.detachShader(prog, prevshaders[0]);
@@ -27,6 +49,19 @@ function recompile_program(gl, prog, vname, vsource, fname, fsource) {
         console.error(gl.getProgramInfoLog(prog));
         return false;
     }
+
+    const nblocks = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORM_BLOCKS);
+    if (nblocks != bindings.length)  {
+        console.error('Unexpected change in bindings.');
+    } else {
+        for (let blocki = 0; blocki < nblocks; ++blocki) {
+            gl.uniformBlockBinding(prog, blocki, bindings[blocki]);
+        }
+    }
+
+    console.info('after:');
+    dump_program_state(gl, prog);
+
     console.info(`Success compiling [${vname}] and [${fname}].`);
     return true;
 }
