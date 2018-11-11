@@ -10,7 +10,7 @@
     "url": "https://github.com/prideout/shaderhud.git"
   },
   "files": [
-    "shaderhud.js",
+    "shaderhud.js"
   ],
   "author": "Philip Rideout",
   "license": "MIT"
