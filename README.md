@@ -4,6 +4,9 @@ code in any running WebGL 2.0 app. This makes it easy to perform experiments and
 Shaderhud is fairly robust at collecting shaders for viewing purposes, but the shader editing
 feature only works with certain rendering engines that use uniform blocks (e.g. [Filament]).
 
+There are many limitations to shader editing due to the fact that WebGL doesn't allow shaderhud
+to glean information from a `WebGLUniformLocation` object.
+
 To inject shaderhud, first paste this into your browser's developer console:
 
 ```js

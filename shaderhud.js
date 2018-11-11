@@ -161,10 +161,16 @@ function create_shaderhud(canvas, gl) {
         }
     };
 
-    const uniform1i = gl.uniform1i.bind(gl);
-    gl.uniform1i = (loc, val) => {
-        uniform1i(loc, val);
-    };
+    // let activeProgram = null;
+    // const uniform1i = gl.uniform1i.bind(gl);
+    // gl.uniform1i = (loc, val) => {
+    //     if (activeProgram && activeProgram.name in programdb) {
+    //         const programentry = programdb[activeProgram.name];
+    //         const oindex = programentry.original_sampler_locations.indexOf(loc);
+    //         console.warn('uniform1i ' + oindex, programentry.original_sampler_locations, loc);
+    //     }
+    //     uniform1i(loc, val);
+    // };
 
     const useProgram = gl.useProgram.bind(gl);
     gl.useProgram = (program) => {
@@ -172,6 +178,7 @@ function create_shaderhud(canvas, gl) {
             program.name = '__' + uniqueName++;
             console.info(uniqueName);
         }
+        activeProgram = program;
         if (program.name in programdb) {
             const replaced = programdb[program.name].replaced;
             useProgram(replaced);
@@ -180,8 +187,23 @@ function create_shaderhud(canvas, gl) {
         const programentry = {
             shaderids: [],
             original: program,
-            replaced: program
+            replaced: program,
+            original_sampler_locations: [],
+            original_sampler_values: [],
+            replaced_sampler_locations: [],
         };
+
+        const nuniforms = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
+        for (let uniformi = 0; uniformi < nuniforms; ++uniformi) {
+            const info = gl.getActiveUniform(program, uniformi);
+            if (info.type === gl.SAMPLER_CUBE || info.type === gl.SAMPLER_2D) {
+                const loc = gl.getUniformLocation(program, info.name);
+                const val = gl.getUniform(program, loc);
+                programentry.original_sampler_locations.push(loc);
+                programentry.original_sampler_values.push(val);
+            }
+        }
+
         const shaders = gl.getAttachedShaders(program);
         for (const shader of shaders) {
             const isfrag = gl.getShaderParameter(shader, gl.SHADER_TYPE) === gl.FRAGMENT_SHADER;
@@ -202,6 +224,19 @@ function create_shaderhud(canvas, gl) {
         if (testing) {
             recompileshaders(programentry.shaderids[1]);
             useProgram(programentry.replaced);
+
+            programentry.replaced_sampler_locations = [];
+            const prog = programentry.replaced;
+            const nuniforms = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORMS);
+            for (let uniformi = 0; uniformi < nuniforms; ++uniformi) {
+                const info = gl.getActiveUniform(prog, uniformi);
+                if (info.type === gl.SAMPLER_CUBE || info.type === gl.SAMPLER_2D) {
+                    const loc = gl.getUniformLocation(prog, info.name);
+                    programentry.replaced_sampler_locations.push(loc);
+                    // const val = gl.getUniform(program, loc);
+                }
+            }
+
             return;
         }
         useProgram(program);
