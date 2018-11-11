@@ -1,5 +1,8 @@
-function create_program(gl, vname, vsource, fname, fsource) {
-    const prog = gl.createProgram();
+function recompile_program(gl, prog, vname, vsource, fname, fsource) {
+
+    const prevshaders = gl.getAttachedShaders(prog);
+    gl.detachShader(prog, prevshaders[0]);
+    gl.detachShader(prog, prevshaders[1]);
 
     const vshader = gl.createShader(gl.VERTEX_SHADER);
     gl.shaderSource(vshader, vsource);
@@ -22,10 +25,10 @@ function create_program(gl, vname, vsource, fname, fsource) {
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
         console.error(gl.getProgramInfoLog(prog));
-        return null;
+        return false;
     }
     console.info(`Success compiling [${vname}] and [${fname}].`);
-    return prog;
+    return true;
 }
 
 function create_shaderhud(canvas, gl) {
@@ -57,14 +60,12 @@ function create_shaderhud(canvas, gl) {
     const useProgram = gl.useProgram.bind(gl);
     gl.useProgram = (program) => {
         if (program.name in programdb) {
-            const programentry = programdb[program.name];
-            useProgram(programentry.replaced_program);
+            useProgram(program);
             return;
         }
         const programentry = {
             shaderids: [],
-            original_program: program,
-            replaced_program: program,
+            programobj: program
         };
         const shaders = gl.getAttachedShaders(program);
         for (const shader of shaders) {
@@ -73,10 +74,11 @@ function create_shaderhud(canvas, gl) {
             const glslstring = gl.getShaderSource(shader);
             const shaderid = `${program.name} ${stageid} ${glslstring.length}`;
             const shaderentry = {
-                program: program,
-                shader: shader,
-                original: glslstring,
-                applied: glslstring,
+                programobj: program,
+                original_shaderobj: shader,
+                replaced_shaderobj: shader,
+                original_string: glslstring,
+                applied_string: glslstring,
             };
             programentry.shaderids.push(shaderid);
             shaderdb[shaderid] = shaderentry;
@@ -84,44 +86,41 @@ function create_shaderhud(canvas, gl) {
                 `<option value="${shaderid}">${shaderid}</option>`);
         }
         programdb[program.name] = programentry;
-        useProgram(programentry.replaced_program);
+        useProgram(program);
     };
     const updatebuttons = () => {
         const shaderentry = shaderdb[selectel.value];
-        applyel.hidden = texteditor.getValue() === shaderentry.applied;
-        revertel.hidden = shaderentry.applied === shaderentry.original;
+        applyel.hidden = texteditor.getValue() === shaderentry.applied_string;
+        revertel.hidden = shaderentry.applied_string === shaderentry.original_string;
     };
     const recompileshaders = () => {
-        const programentry = programdb[shaderdb[selectel.value].program.name];
+        const shaderentry = shaderdb[selectel.value];
+        const programentry = programdb[shaderentry.programobj.name];
         const shaderid0 = programentry.shaderids[0];
         const shaderid1 = programentry.shaderids[1];
-        const source0 = shaderdb[shaderid0].applied;
-        const source1 = shaderdb[shaderid1].applied;
-        const progobj = create_program(gl, shaderid0, source0, shaderid1, source1);
-        if (progobj) {
-            programentry.replaced_program = progobj;
-        }
+        const source0 = shaderdb[shaderid0].applied_string;
+        const source1 = shaderdb[shaderid1].applied_string;
+        recompile_program(gl, shaderentry.programobj, shaderid0, source0, shaderid1, source1);
     };
     applyel.addEventListener('click', () => {
         const shaderentry = shaderdb[selectel.value];
-        shaderentry.applied = texteditor.getValue();
+        shaderentry.applied_string = texteditor.getValue();
         updatebuttons();
         recompileshaders();
     });
     revertel.addEventListener('click', () => {
         const shaderentry = shaderdb[selectel.value];
-        shaderentry.applied = shaderentry.original;
-        texteditor.setValue(shaderentry.applied);
+        shaderentry.applied_string = shaderentry.original_string;
+        texteditor.setValue(shaderentry.applied_string);
         updatebuttons();
-        const programentry = programdb[shaderentry.program.name];
-        programentry.replaced_program = programentry.original_program;
+        recompileshaders();
     });
     texteditor.on('change', () => updatebuttons());
     selectel.onchange = (evt) => {
         const val = evt.target.value;
         if (val) {
             editorel.hidden = false;
-            texteditor.setValue(shaderdb[val].applied);
+            texteditor.setValue(shaderdb[val].applied_string);
             updatebuttons();
         } else {
             editorel.hidden = true;
