@@ -1,5 +1,8 @@
 This package displays a shader editor over your `<canvas>` that lets you modify the GLSL
-code in any running WebGL app. This makes it easy to perform experiments and diagnostics.
+code in any running WebGL 2.0 app. This makes it easy to perform experiments and diagnostics.
+
+Shaderhud is fairly robust at collecting shaders for viewing purposes, but the shader editing
+feature only works with certain rendering engines that use uniform blocks (e.g. [Filament]).
 
 To inject shaderhud, first paste this into your browser's developer console:
 

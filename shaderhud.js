@@ -1,27 +1,45 @@
+const testing = true;
+
+// getUniform
+
 function dump_program_state(gl, prog) {
     const nblocks = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORM_BLOCKS);
     const ubindings = [];
-    let uniforms = '    ';
+    let ublocks = '    UBLOCKS:';
     for (let blocki = 0; blocki < nblocks; ++blocki) {
         const binding = gl.getActiveUniformBlockParameter(prog, blocki, gl.UNIFORM_BLOCK_BINDING);
         const name = gl.getActiveUniformBlockName(prog, blocki);
-        uniforms +=  name + ':' + binding + ' ';
+        ublocks +=  name + ':' + binding + ' ';
         ubindings.push(binding);
     }
-    let attribs = '    ';
+    let attribs = '    ATTRIBS:';
     const nattribs = gl.getProgramParameter(prog, gl.ACTIVE_ATTRIBUTES);
     for (let attribi = 0; attribi < nattribs; ++attribi) {
         const info = gl.getActiveAttrib(prog, attribi);
         const loc = gl.getAttribLocation(prog, info.name);
         attribs += info.name + ':' + info.size  + ':' + info.type + ':' + loc + ' ';
     }
-    console.info(uniforms);
+
+    let sampler = '    SAMPLER:';
+    const nuniforms = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORMS);
+    for (let uniformi = 0; uniformi < nuniforms; ++uniformi) {
+        const info = gl.getActiveUniform(prog, uniformi);
+        if (info.type === gl.SAMPLER_CUBE || info.type === gl.SAMPLER_2D) {
+            const loc = gl.getUniformLocation(prog, info.name);
+            const val = gl.getUniform(prog, loc);
+            sampler += info.name + ':' + val + ' ';
+        }
+    }
+
+    console.info(ublocks);
     console.info(attribs);
+    console.info(sampler);
+
     return ubindings;
 }
 
 function recompile_program(gl, prog, vname, vsource, fname, fsource) {
-    console.info('before:');
+    console.info('before recompile:');
     const bindings = dump_program_state(gl, prog);
     prog = gl.createProgram();
 
@@ -60,7 +78,7 @@ function recompile_program(gl, prog, vname, vsource, fname, fsource) {
         }
     }
 
-    console.info('after:');
+    console.info('after recompile:');
     dump_program_state(gl, prog);
 
     console.info(`Success compiling [${vname}] and [${fname}].`);
@@ -89,6 +107,7 @@ function create_shaderhud(canvas, gl) {
     editorel.hidden = true;
     applyel.hidden = true;
     revertel.hidden = true;
+    let uniqueName = 0;
 
     const programdb = {};
     const shaderdb = {};
@@ -99,8 +118,8 @@ function create_shaderhud(canvas, gl) {
         revertel.hidden = shaderentry.applied_string === shaderentry.original_string;
     };
 
-    const recompileshaders = () => {
-        const shaderentry = shaderdb[selectel.value];
+    const recompileshaders = (shaderid) => {
+        const shaderentry = shaderdb[shaderid];
         const programentry = programdb[shaderentry.programobj.name];
         const shaderid0 = programentry.shaderids[0];
         const shaderid1 = programentry.shaderids[1];
@@ -108,6 +127,7 @@ function create_shaderhud(canvas, gl) {
         const source1 = shaderdb[shaderid1].applied_string;
         const prog = recompile_program(gl, shaderentry.programobj, shaderid0, source0, shaderid1, source1);
         if (prog) {
+            prog.name = '__' + uniqueName++;
             programentry.replaced = prog;
         }
     };
@@ -116,7 +136,7 @@ function create_shaderhud(canvas, gl) {
         const shaderentry = shaderdb[selectel.value];
         shaderentry.applied_string = texteditor.getValue();
         updatebuttons();
-        recompileshaders();
+        recompileshaders(selectel.value);
     });
 
     revertel.addEventListener('click', () => {
@@ -141,10 +161,20 @@ function create_shaderhud(canvas, gl) {
         }
     };
 
+    const uniform1i = gl.uniform1i.bind(gl);
+    gl.uniform1i = (loc, val) => {
+        uniform1i(loc, val);
+    };
+
     const useProgram = gl.useProgram.bind(gl);
     gl.useProgram = (program) => {
+        if (!('name' in program)) {
+            program.name = '__' + uniqueName++;
+            console.info(uniqueName);
+        }
         if (program.name in programdb) {
-            useProgram(programdb[program.name].replaced);
+            const replaced = programdb[program.name].replaced;
+            useProgram(replaced);
             return;
         }
         const programentry = {
@@ -169,6 +199,11 @@ function create_shaderhud(canvas, gl) {
                 `<option value="${shaderid}">${shaderid}</option>`);
         }
         programdb[program.name] = programentry;
+        if (testing) {
+            recompileshaders(programentry.shaderids[1]);
+            useProgram(programentry.replaced);
+            return;
+        }
         useProgram(program);
     };
 }
