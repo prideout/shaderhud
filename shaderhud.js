@@ -1,6 +1,4 @@
-const testing = true;
-
-// getUniform
+const testing = false;
 
 function dump_program_state(gl, prog) {
     const nblocks = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORM_BLOCKS);
@@ -21,6 +19,7 @@ function dump_program_state(gl, prog) {
     }
 
     let sampler = '    SAMPLER:';
+    const sbindings = {};
     const nuniforms = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORMS);
     for (let uniformi = 0; uniformi < nuniforms; ++uniformi) {
         const info = gl.getActiveUniform(prog, uniformi);
@@ -28,6 +27,7 @@ function dump_program_state(gl, prog) {
             const loc = gl.getUniformLocation(prog, info.name);
             const val = gl.getUniform(prog, loc);
             sampler += info.name + ':' + val + ' ';
+            sbindings[info.name] = val;
         }
     }
 
@@ -35,12 +35,12 @@ function dump_program_state(gl, prog) {
     console.info(attribs);
     console.info(sampler);
 
-    return ubindings;
+    return [ubindings, sbindings];
 }
 
-function recompile_program(gl, prog, vname, vsource, fname, fsource) {
+function recompile_program(gl, prog, useProgram, vname, vsource, fname, fsource) {
     console.info('before recompile:');
-    const bindings = dump_program_state(gl, prog);
+    const [ubindings, sbindings] = dump_program_state(gl, prog);
     prog = gl.createProgram();
 
     const vshader = gl.createShader(gl.VERTEX_SHADER);
@@ -70,11 +70,17 @@ function recompile_program(gl, prog, vname, vsource, fname, fsource) {
     }
 
     const nblocks = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORM_BLOCKS);
-    if (nblocks != bindings.length)  {
+    if (nblocks != ubindings.length)  {
         console.error('Unexpected change in bindings.');
     } else {
+        useProgram(prog);
         for (let blocki = 0; blocki < nblocks; ++blocki) {
-            gl.uniformBlockBinding(prog, blocki, bindings[blocki]);
+            gl.uniformBlockBinding(prog, blocki, ubindings[blocki]);
+        }
+        for (const name in sbindings) {
+            const loc = gl.getUniformLocation(prog, name);
+            const val = sbindings[name];
+            gl.uniform1i(loc, val);
         }
     }
 
@@ -118,6 +124,8 @@ function create_shaderhud(canvas, gl) {
         revertel.hidden = shaderentry.applied_string === shaderentry.original_string;
     };
 
+    const useProgram = gl.useProgram.bind(gl);
+
     const recompileshaders = (shaderid) => {
         const shaderentry = shaderdb[shaderid];
         const programentry = programdb[shaderentry.programobj.name];
@@ -125,7 +133,7 @@ function create_shaderhud(canvas, gl) {
         const shaderid1 = programentry.shaderids[1];
         const source0 = shaderdb[shaderid0].applied_string;
         const source1 = shaderdb[shaderid1].applied_string;
-        const prog = recompile_program(gl, shaderentry.programobj, shaderid0, source0, shaderid1, source1);
+        const prog = recompile_program(gl, shaderentry.programobj, useProgram, shaderid0, source0, shaderid1, source1);
         if (prog) {
             prog.name = '__' + uniqueName++;
             programentry.replaced = prog;
@@ -161,18 +169,6 @@ function create_shaderhud(canvas, gl) {
         }
     };
 
-    // let activeProgram = null;
-    // const uniform1i = gl.uniform1i.bind(gl);
-    // gl.uniform1i = (loc, val) => {
-    //     if (activeProgram && activeProgram.name in programdb) {
-    //         const programentry = programdb[activeProgram.name];
-    //         const oindex = programentry.original_sampler_locations.indexOf(loc);
-    //         console.warn('uniform1i ' + oindex, programentry.original_sampler_locations, loc);
-    //     }
-    //     uniform1i(loc, val);
-    // };
-
-    const useProgram = gl.useProgram.bind(gl);
     gl.useProgram = (program) => {
         if (!('name' in program)) {
             program.name = '__' + uniqueName++;
@@ -224,19 +220,6 @@ function create_shaderhud(canvas, gl) {
         if (testing) {
             recompileshaders(programentry.shaderids[1]);
             useProgram(programentry.replaced);
-
-            programentry.replaced_sampler_locations = [];
-            const prog = programentry.replaced;
-            const nuniforms = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORMS);
-            for (let uniformi = 0; uniformi < nuniforms; ++uniformi) {
-                const info = gl.getActiveUniform(prog, uniformi);
-                if (info.type === gl.SAMPLER_CUBE || info.type === gl.SAMPLER_2D) {
-                    const loc = gl.getUniformLocation(prog, info.name);
-                    programentry.replaced_sampler_locations.push(loc);
-                    // const val = gl.getUniform(program, loc);
-                }
-            }
-
             return;
         }
         useProgram(program);
